@@ -6,10 +6,10 @@ source("global.R")
   read_ATU_comparator <- function(comparator_path) {
     
     ATU_compare <- read_excel(comparator_path) %>% 
-      rename(ATU_code='Кодифікатор',
-             KOATUU_code="Код об'єкта КОАТУУ",
-             category="Категорія об’єкта",
-             name="Назва об’єкта")
+      rename(ATU_code='РљРѕРґРёС„С–РєР°С‚РѕСЂ',
+             KOATUU_code="РљРѕРґ РѕР±'С”РєС‚Р° РљРћРђРўРЈРЈ",
+             category="РљР°С‚РµРіРѕСЂС–СЏ РѕР±вЂ™С”РєС‚Р°",
+             name="РќР°Р·РІР° РѕР±вЂ™С”РєС‚Р°")
     
     return(ATU_compare)
     
@@ -46,7 +46,7 @@ source("global.R")
       
     
     #pattern for clearing address column
-    patterns <- c("наб\\.|кімната|майдан|вул\\.|вулиця|ВУЛИЦЯ|квартира|провулок|просп\\.|проспект |пров\\.|буд\\.|пл.|ПЛОЩА|будинок|ал\\.|пр-кт|^б-р|\\*|\\r \\n")
+    patterns <- c("РЅР°Р±\\.|РєС–РјРЅР°С‚Р°|РјР°Р№РґР°РЅ|РІСѓР»\\.|РІСѓР»РёС†СЏ|Р’РЈР›РР¦РЇ|РєРІР°СЂС‚РёСЂР°|РїСЂРѕРІСѓР»РѕРє|РїСЂРѕСЃРї\\.|РїСЂРѕСЃРїРµРєС‚ |РїСЂРѕРІ\\.|Р±СѓРґ\\.|РїР».|РџР›РћР©Рђ|Р±СѓРґРёРЅРѕРє|Р°Р»\\.|РїСЂ-РєС‚|^Р±-СЂ|\\*|\\r \\n")
     
     #clear address column
     inst <- inst %>% 
@@ -148,7 +148,7 @@ source("global.R")
     
     initial_rows <- nrow(data)
     
-    ATU <- read_ATU_comparator(ATU_c_file) %>% filter(category!="Н")
+    ATU <- read_ATU_comparator(ATU_c_file) %>% filter(category!="Рќ")
     
     data <- data %>% 
       inner_join(ATU, by=c("koatuu_id"="KOATUU_code")) %>% 
@@ -182,7 +182,7 @@ source("global.R")
     inst_res <- data_frame()
     
     ATU_compare <- read_ATU_comparator(ATU_comp_file) %>% 
-      filter(!category %in% c("С","Х"))
+      filter(!category %in% c("РЎ","РҐ"))
     
     for(i in 1:nrow(data)) {
       
@@ -373,7 +373,7 @@ source("global.R")
   #bind occupied and active schools
   # inst_full <- bind_rows(inst_closed,insts) %>% 
   #     mutate(across(full_name, 
-  #                   ~str_replace_all(.x,c("I"="І","„|”"="","`"="'"))))
+  #                   ~str_replace_all(.x,c("I"="Р†","вЂћ|вЂќ"="","`"="'"))))
   # 
   inst_name <- fread(inst_names, colClasses=c("character"))
   
@@ -494,7 +494,7 @@ source("global.R")
     #bind occupied and active schools
     inst_full <- bind_rows(inst_occupied,inst) %>% 
       mutate(across(full_name, 
-                    ~str_replace_all(.x,c("I"="І","„|”"="","`"="'"))))
+                    ~str_replace_all(.x,c("I"="Р†","вЂћ|вЂќ"="","`"="'"))))
     
   }
   
@@ -557,7 +557,7 @@ source("global.R")
               
               #fetch schools IDs into one dataset
               t_tmp <- bind_rows(t_tmp) %>%
-                select('№ у системі') %>% rename(id_='№ у системі') %>% 
+                select('в„– Сѓ СЃРёСЃС‚РµРјС–') %>% rename(id_='в„– Сѓ СЃРёСЃС‚РµРјС–') %>% 
                 mutate(type=inst_types[i], koatuu=koatuu_codes[j]) %>%
                 mutate_if(is.numeric, as.character)
               
@@ -575,7 +575,7 @@ source("global.R")
               html_table()
             
             t_tmp <- bind_rows(t_tmp) %>%
-              select('№ у системі') %>% rename(id_='№ у системі') %>% 
+              select('в„– Сѓ СЃРёСЃС‚РµРјС–') %>% rename(id_='в„– Сѓ СЃРёСЃС‚РµРјС–') %>% 
               mutate(type=inst_types[i],koatuu=koatuu_codes[j]) %>% 
               mutate_if(is.numeric, as.character)
             
@@ -589,7 +589,7 @@ source("global.R")
       
       #remove IDs of inactive schools
       schools_table <- schools_table %>% 
-        filter(id_ != "ЗЗСО, які не працюють")
+        filter(id_ != "Р—Р—РЎРћ, СЏРєС– РЅРµ РїСЂР°С†СЋСЋС‚СЊ")
       
       return(schools_table)
       
@@ -620,17 +620,17 @@ source("global.R")
       
       #combine data from table and geodata into one dataset
       sc_table <- table %>% 
-        select(id='№ у системі:',
-               full_name='Повна назва:',
-               short_name='Скорочена:',
-               koatuu_code='Код КОАТУУ:',
-               type='Тип ЗЗСО:',
-               ownership='Форма власності:',
-               location_type='Тип місцевості:',
-               zip='Індекс:',
-               address='Поштова адреса:',
-               website_url='Сайт(и):',
-               portal_url='ЗЗСО на порталі «Нові знання»:') %>%
+        select(id='в„– Сѓ СЃРёСЃС‚РµРјС–:',
+               full_name='РџРѕРІРЅР° РЅР°Р·РІР°:',
+               short_name='РЎРєРѕСЂРѕС‡РµРЅР°:',
+               koatuu_code='РљРѕРґ РљРћРђРўРЈРЈ:',
+               type='РўРёРї Р—Р—РЎРћ:',
+               ownership='Р¤РѕСЂРјР° РІР»Р°СЃРЅРѕСЃС‚С–:',
+               location_type='РўРёРї РјС–СЃС†РµРІРѕСЃС‚С–:',
+               zip='Р†РЅРґРµРєСЃ:',
+               address='РџРѕС€С‚РѕРІР° Р°РґСЂРµСЃР°:',
+               website_url='РЎР°Р№С‚(Рё):',
+               portal_url='Р—Р—РЎРћ РЅР° РїРѕСЂС‚Р°Р»С– В«РќРѕРІС–В Р·РЅР°РЅРЅСЏВ»:') %>%
         mutate(latitude=geo[1], longtitude=geo[2]) %>% 
         as_tibble()
       
@@ -641,15 +641,15 @@ source("global.R")
       
       #combine data from table and geodata into one dataset
       sc_table <- table %>% 
-        select(id='№ у системі:',
-               full_name='Повна назва:',
-               short_name='Скорочена:',
-               koatuu_code='Код КОАТУУ:',
-               type='Тип:',
-               ownership='Форма власності:',
-               zip='Індекс:',
-               address='Поштова адреса:',
-               website_url='Сайт(и):') %>%
+        select(id='в„– Сѓ СЃРёСЃС‚РµРјС–:',
+               full_name='РџРѕРІРЅР° РЅР°Р·РІР°:',
+               short_name='РЎРєРѕСЂРѕС‡РµРЅР°:',
+               koatuu_code='РљРѕРґ РљРћРђРўРЈРЈ:',
+               type='РўРёРї:',
+               ownership='Р¤РѕСЂРјР° РІР»Р°СЃРЅРѕСЃС‚С–:',
+               zip='Р†РЅРґРµРєСЃ:',
+               address='РџРѕС€С‚РѕРІР° Р°РґСЂРµСЃР°:',
+               website_url='РЎР°Р№С‚(Рё):') %>%
         mutate(latitude=geo[1], longtitude=geo[2]) %>% 
         as_tibble()
       
@@ -751,7 +751,7 @@ source("global.R")
     #functions of getting geocodes from address
     get_geocodes <- function(dataset) {
       
-      register_google("AIzaSyAHlh3jW5O6Dp_yL-NdG92LY1FWPKR9AvA")
+      register_google("put key here")
       
       for(i in 1:nrow(dataset)) {
         
@@ -1372,7 +1372,7 @@ source("global.R")
       crimea_schools <- read_csv("Schools_data.csv")
       
       crimea_schools <- crimea_schools %>% 
-        filter(tabtxt %like% "Автономна Республіка Крим|Севастополь") %>% 
+        filter(tabtxt %like% "РђРІС‚РѕРЅРѕРјРЅР° Р РµСЃРїСѓР±Р»С–РєР° РљСЂРёРј|РЎРµРІР°СЃС‚РѕРїРѕР»СЊ") %>% 
         rename(address=tabtxt,
                short_name=value,
                full_name=eoname,
@@ -1404,13 +1404,13 @@ source("global.R")
           
         }
         
-        if(grepl("с\\.|с-ще|село|селище",crimea_schools$address[i])) {
+        if(grepl("СЃ\\.|СЃ-С‰Рµ|СЃРµР»Рѕ|СЃРµР»РёС‰Рµ",crimea_schools$address[i])) {
           
-          crimea_schools$location_type[i] <- "сільська"
+          crimea_schools$location_type[i] <- "СЃС–Р»СЊСЃСЊРєР°"
         }
         else {
           
-          crimea_schools$location_type[i] <- "міська"
+          crimea_schools$location_type[i] <- "РјС–СЃСЊРєР°"
           
         }
       }
