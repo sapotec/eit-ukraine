@@ -61,43 +61,6 @@ source("global.R")
 
   }
   
-  #read ATU codifier file from csv
-  get_ATU_codifier_list <- function(codifier_path) {
-    
-    tic.clearlog()
-    tic("read full ATU codifier")
-    
-    ATU_all <- fread(codifier_path, na.strings = "", encoding = "UTF-8") %>% 
-      setnames(1:5, paste0("ATU_", c("first", "second", "third", "fourth", "extra"))) %>%
-      setnames(6:7, c("category", "name")) %>% 
-      remove_extra_symbols(.) %>% 
-      distinct(ATU_third,category,name, .keep_all = TRUE)
-    
-    oblast <- ATU_all[category == category_list$obl, c(1, 7)]
-    oblast$name <- ifelse(str_detect(oblast$name, "Крим"), oblast$name, str_c(oblast$name, " область"))
-    
-    adm <- ATU_all[category == category_list$adm, c(1, 7)]
-    rajon <- ATU_all[category == category_list$raion, c(1, 2, 7)]
-    rajon$name <- str_c(rajon$name, " район")
-    
-    hromada <- ATU_all[category == category_list$hrom, c(1:3, 7)]
-    settlement <- ATU_all[category %in% c(category_list$cities, 
-                                          category_list$villages, category_list$selusche), c(1:4, 7)]
-    smt <- ATU_all[category == category_list$smt, c(1:4, 7)]
-    misto <- ATU_all[category == category_list$misto, c(1:4, 7)]
-    village <- ATU_all[category == category_list$villages, c(1:4, 7)]
-    selusche <- ATU_all[category == category_list$selusche, c(1:4, 7)]
-    district <- ATU_all[category == category_list$district, c(1:5, 7)]
-    
-    ATU <- list(oblast = oblast, adm = adm, rajon = rajon, hromada = hromada, settlement = settlement,
-                smt = smt, misto = misto, village = village, selusche=selusche, district = district)
-    
-    return(ATU)
-    
-    toc(log=TRUE)
-    return(ATU)
-  }
-  
   #read hromadas dictionary from file
   read_hromada_dict <- function(hromada_path) {
     
@@ -154,7 +117,8 @@ source("global.R")
               ~case_when(
                  str_detect(.,"селище, село") ~ "село",
                  str_detect(.,"селище міського типу") ~ "місто",
-                 str_detect(.,"місто") ~ "місто")))
+                 str_detect(.,"місто") ~ "місто",
+                 str_detect(.,"інша країна") ~ "місто")))
     
     toc(log=TRUE)
   
@@ -256,7 +220,7 @@ source("global.R")
     assert_all_are_equal_to(nlevels(data$tertypename),2)
     
     #check types of students' background
-    assert_all_are_greater_than_or_equal_to(nlevels(data$regtypename),3)
+    assert_all_are_greater_than_or_equal_to(nlevels(data$regtypename),2)
     
     #check equality of NAs for class profiles and school names
     if ("classprofilename" %in% colnames(data)) {
@@ -503,6 +467,8 @@ source("global.R")
                      data[ATU$adm, on = c(setNames("name", ter_list$reg)), nomatch = 0]) %>%
       relocate(ATU_first, .after = ter_list$ter)
     
+    #return(list(data,obl))
+    
     assert_all_are_equal_to(nrow(obl),nrow(data))
     assert_all_are_equal_to(sum(is.na(obl$ATU_first)),0)
     assert_all_are_equal_to(nrow(obl),n_distinct(obl$outid))
@@ -534,8 +500,9 @@ source("global.R")
     hromada <- bind_rows(h_third,rajon[!h_third,on=.(outid)][ATU$settlement,
                           on=c(ATU_first="ATU_first",ATU_second="ATU_second",
                                setNames("name", ter_list$ter)),nomatch=0]) %>% 
-      relocate(ATU_third:ATU_extra, .after = ATU_second) #%>% 
-      #select(c(outid:ukrpttername))
+      relocate(ATU_third:ATU_extra, .after = ATU_second)
+    
+    #return(list(data,hromada))
     
     assert_all_are_equal_to(nrow(hromada),nrow(data))
     assert_all_are_equal_to(sum(is.na(hromada$ATU_third)),0)
@@ -758,7 +725,7 @@ source("global.R")
     
     if(file.exists(path)){
       
-      rw <- fread(path,na.strings = c("",NA)) %>% assign_datatypes(.)
+      rw <- fread(path,na.strings = c("",NA),sep = ";") %>% assign_datatypes(.)
       
       if(!any(rw$year==year)) {
         
@@ -934,9 +901,22 @@ source("global.R")
   
     
   #preparing datasets for 2016-2022
-  read_data(path_2016) %>%
-    prepare_raw_dataset(.,2016) %>% 
-    write_to_file(.,path_zno_raw,2016)
+  l <- read_data(path_2016) %>%
+    rename_ukr(.) %>%
+    remove_useless_data(.) %>% 
+    rename_toponimics(.,path_toponimics, orig_KOATUU_list) %>% 
+    rename_toponimics(.,path_toponimics, school_KOATUU_list) %>% 
+    add_KOATUU(.,path_KOATUU_json,KOATUU_ref_file,orig_KOATUU_list) %>%
+    add_ATU(.,ATU_compare_file,ATU_codifier_xl,orig_KOATUU_list$col_pref) %>%
+    #add_hromname(.,orig_KOATUU_list) %>% 
+    #add_tertypename(.,path_KOATUU_json,KOATUU_ref_file) %>%
+    #align_regtypename(.) %>%
+    #add_year(.,year) %>%
+    #tests_location_consistent(.) %>%
+    #remove_KOATUU(.) %>% 
+    #assign_datatypes(.)
+    #prepare_raw_dataset(.,2016) %>% 
+    #write_to_file(.,path_zno_raw,2016)
   
   read_data(path_2017) %>% 
     select(-stid) %>%
@@ -977,6 +957,35 @@ source("global.R")
     prepare_raw_dataset(.,2022) %>% 
     write_to_file(.,path_zno_raw,2022)
   
+  full <- read_data(path_2023) %>% 
+    select(-c(test,testdate)) %>% 
+    rename(ukrteststatus=ukrblockstatus,ukrtest=ukrblock,ukrball100=ukrblockball100,ukrball=ukrblockball,
+           histteststatus=histblockstatus,histtest=histblock,histball100=histblockball100,histball=histblockball,
+           mathteststatus=mathblockstatus,mathtest=mathblock,mathball100=mathblockball100,mathball=mathblockball,
+           physteststatus=physblockstatus,phystest=physblock,physball100=physblockball100,physball=physblockball,
+           chemteststatus=chemblockstatus,chemtest=chemblock,chemball100=chemblockball100,chemball=chemblockball,
+           bioteststatus=bioblockstatus,biotest=bioblock,bioball100=bioblockball100,bioball=bioblockball,
+           engteststatus=engblockstatus,engtest=engblock,engball100=engblockball100,engball=engblockball,
+           frateststatus=frablockstatus,fratest=frablock,fraball100=frablockball100,fraball=frablockball,
+           deuteststatus=deublockstatus,deutest=deublock,deuball100=deublockball100,deuball=deublockball,
+           spateststatus=spablockstatus,spatest=spablock,spaball100=spablockball100,spaball=spablockball,
+           ukrptregname=ptregname,ukrptareaname=ptareaname,ukrpttername=pttername)
+  
+  data_outside_ukr <- full %>% filter(regname=="Інші країни") %>% 
+    remove_useless_data(.) %>% 
+    align_teststatus(.) %>% 
+    align_tertypename(.) %>% 
+    align_regtypename(.) %>%
+    add_year(.,2023) %>%
+    assign_datatypes(.)
+    
+  
+  full_d <- full %>% filter(regname!="Інші країни") %>% 
+    prepare_raw_dataset(.,2023)
+  
+  bind_rows(full_d,data_outside_ukr) %>% 
+    write_to_file(.,path_zno_raw,2023)
+  
  }
 
 #prepare dataset by tests and students 2016+
@@ -986,6 +995,10 @@ source("global.R")
   zno_raw <- fread(path_zno_raw,na.strings = c("",NA)) %>% assign_datatypes(.)
   
   #observation by test result per student for each year
+  zno_raw %>% filter(year==2023) %>% 
+    prepare_tests_dataset(.,2023) %>% 
+    write_to_file(.,path_zno_tests,2023)
+  
   zno_raw %>% filter(year==2022) %>% 
     prepare_tests_dataset(.,2022) %>% 
     write_to_file(.,path_zno_tests,2022)
@@ -1022,6 +1035,10 @@ source("global.R")
   #read raw dataset
   zno_raw <- fread(path_zno_raw,na.strings = c("",NA))
   
+  zno_raw %>% filter(year==2023) %>% 
+    prepare_schools_dataset(.,2023) %>% 
+    write_to_file(.,path_zno_schools,2023)
+  
   zno_raw %>% filter(year==2022) %>% 
     prepare_schools_dataset(.,2022) %>% 
     write_to_file(.,path_zno_schools,2022)
@@ -1053,38 +1070,51 @@ source("global.R")
 }
 
 #bind schools ids and geocodes to dataset
-{
+{ 
+  
+  insts <- fread(institutions_dictionary, encoding = "UTF-8", na.strings = c("", NA)) %>% 
+    mutate(
+      across(
+        c(inst_name, old_name0, old_name1, old_name2, old_name3, old_name4),
+        ~ str_replace_all(.x, c("„|”" = "", "`" = "'")) %>% 
+          gsub(pattern = "I", replacement = "І", ignore.case = TRUE)
+      ),
+      s_name = trimws(str_to_lower(inst_name)),
+      s_name0 = trimws(str_to_lower(old_name0)),
+      s_name1 = trimws(str_to_lower(old_name1)),
+      s_name2 = trimws(str_to_lower(old_name2)),
+      s_name3 = trimws(str_to_lower(old_name3)),
+      s_name4 = trimws(str_to_lower(old_name4))
+    ) %>% 
+    mutate(
+      across(
+        c(s_name, s_name0, s_name1, s_name2, s_name3, s_name4),
+        ~ str_replace_all(.x, "\\s", "")
+      )
+    ) %>% 
+    select(-c(closed_date, type, long, lat, parent, old_name0:old_name4, 
+              status, property, closed, edrpou))
+  
   
   #read dataset by schools
   school_dataset <- fread(path_zno_schools, colClasses=c("character"), encoding = "UTF-8") %>% 
     mutate(across(eoname,~str_replace_all(.x,c("„|”"="","`"="'")) %>% 
-                          gsub(pattern = "I",replacement = "І",ignore.case = TRUE))) %>% 
+                    gsub(pattern = "I",replacement = "І",ignore.case = TRUE))) %>% 
     mutate(s_name= str_trim(str_to_lower(eoname))) %>% 
-    mutate(across(s_name,~str_replace_all(.x," ",""))) %>% 
-    mutate(ATU_crop= str_sub(school_ATU_fourth,1,12)) 
-  
-   
-  insts <- read_full_institutions(institutions_full) %>% 
-    mutate(across(full_name,~str_replace_all(.x,c("„|”"="","`"="'")) %>% 
-                            gsub(pattern = "I",replacement = "І",ignore.case = TRUE))) %>% 
-    mutate(across(.cols = c(full_name:old_name4), 
-                  .fns =  ~str_replace_all(str_trim(str_to_lower(.x))," ",""),
-                  .names = '{str_c("s",gsub("^.*?_","_",.col))}')) %>% 
-    mutate(ATU_crop = str_sub(ATU_code,1,12))
-  
+    mutate(across(s_name,~str_replace_all(.x," ","")))
   
   school_ds_year <- school_dataset[year==as.numeric(max(year))-0L,] %>% 
-    distinct(ATU_crop,s_name, .keep_all = TRUE)
+    distinct(school_ATU_fourth,s_name, .keep_all = TRUE)
   
   school_ds_year_init <- school_ds_year
   
-  keys <- list(key1=c("ATU_crop","s_name"),
-               key2=c("ATU_crop","s_name"="s_name0"),
-               key3=c("ATU_crop","s_name"="s_name1"),
-               key4=c("ATU_crop","s_name"="s_name2"),
-               key5=c("ATU_crop","s_name"="s_name3"),
-               key6=c("ATU_crop","s_name"="s_name4"))
-  
+  keys <- list(key1=c("school_ATU_fourth"="ATU_fourth","s_name"),
+               key2=c("school_ATU_fourth"="ATU_fourth","s_name"="s_name0"),
+               key3=c("school_ATU_fourth"="ATU_fourth","s_name"="s_name1"),
+               key4=c("school_ATU_fourth"="ATU_fourth","s_name"="s_name2"),
+               key5=c("school_ATU_fourth"="ATU_fourth","s_name"="s_name3"),
+               key6=c("school_ATU_fourth"="ATU_fourth","s_name"="s_name4"),
+               key7=c("school_ATU_third"="ATU_third","s_name"))
   
   data <- data.frame()
   
@@ -1102,9 +1132,9 @@ source("global.R")
 
   school_ds_year_x <- school_ds_year[,n:=n_distinct(s_name),by=school_ATU_fourth][n==1,-"s_name"]
   
-  insts_x <- insts[,n:=.N,by=.(ATU_code)][n==1,-"s_name"] 
+  insts_x <- insts[,n:=.N,by=.(ATU_fourth)][n==1,-"s_name"] 
     
-  data_u <- school_ds_year_x[insts_x,on=.(ATU_crop),nomatch=0]
+  data_u <- school_ds_year_x[insts_x,on=c("school_ATU_fourth"="ATU_fourth"),nomatch=0]
   
   school_ds_year <- school_ds_year[!data_u,on=.(eoname)]
   
@@ -1118,19 +1148,29 @@ source("global.R")
   
   ins <- insts
   
-  while (nrow(data) < nrow(school_ds_year_init)) {
+  data_d <- data.frame()
   
-    d <- ds[ins,on=.(ATU_crop),nomatch=0, allow.cartesian=TRUE][,distance:=stringdist(tolower(eoname),tolower(full_name),method = "jw")][,.SD[which.min(distance)],by=.(school_ATU_fourth)]
+  while (nrow(bind_rows(data,data_d)) < nrow(school_ds_year_init)) {
+  
+    d <- ds[ins,on=c("school_ATU_fourth"="ATU_fourth"),nomatch=0, 
+            allow.cartesian=TRUE][,distance:=stringdist(tolower(eoname),
+                                                        tolower(inst_name),method = "jw")][,.SD[which.min(distance)],by=.(school_ATU_fourth)]
     
     ds <- ds[!d, on=.(eoname)]
     
     ins <- ins[!d,on=.(EDEBO_id)]
     
-    data <- bind_rows(data,d)
+    data_d <- bind_rows(data_d,d)
     
-    print(nrow(school_ds_year_init)-nrow(data))
+    print(nrow(school_ds_year_init)- nrow(bind_rows(data,data_d)))
     
   }
+  
+  data_d <- data_d %>% relocate(inst_name, .after = eoname)
+  
+  l <- data_d %>% group_by(eoregname) %>% tally()
+  
+  k <- data_d[duplicated(data_d$EDEBO_id),] #add assertion
   
   data <- data %>% relocate(full_name, .after=eoname) %>% select(year,EDEBO_id,eoname:range_200)
   

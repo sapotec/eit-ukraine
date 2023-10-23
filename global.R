@@ -1,49 +1,23 @@
 #install packages
 {
-  if (!("dplyr" %in% installed.packages())) {install.packages("dplyr")}
-  if (!("tidyr" %in% installed.packages())) {install.packages("tidyr")}
-  if (!("stringr" %in% installed.packages())) {install.packages("stringr")}
-  if (!("data.table" %in% installed.packages())) {install.packages("data.table")}
-  if (!("readr" %in% installed.packages())) {install.packages("readr")}
-  if (!("assertive" %in% installed.packages())) {install.packages("assertive")}
-  if (!("readxl" %in% installed.packages())) {install.packages("readxl")}
-  if (!("rjson" %in% installed.packages())) {install.packages("rjson")}
-  if (!("stringi" %in% installed.packages())) {install.packages("stringi")}
-  if (!("purrr" %in% installed.packages())) {install.packages("purrr")}
-  if (!("ggmap" %in% installed.packages())) {install.packages("ggmap")}
-  if (!("jsonlite" %in% installed.packages())) {install.packages("jsonlite")}
-  if (!("leaflet" %in% installed.packages())) {install.packages("leaflet")}
-  if (!("rvest" %in% installed.packages())) {install.packages("rvest")}
-  if (!("xml2" %in% installed.packages())) {install.packages("xml2")}
-  if (!("sf" %in% installed.packages())) {install.packages("sf")}
-  if (!("tm" %in% installed.packages())) {install.packages("tm")}
-  if (!("stringdist" %in% installed.packages())) {install.packages("stringdist")}
-  if (!("mgsub" %in% installed.packages())) {install.packages("mgsub")}
-  if (!("tictoc" %in% installed.packages())) {install.packages("tictoc")}
+  # Define the packages
+  packages <- c("dplyr", "tidyr", "stringr", "data.table", "readr", "assertive", 
+                "readxl", "rjson", "stringi", "purrr", "ggmap", "jsonlite", 
+                "leaflet", "rvest", "xml2", "sf", "tm", "stringdist", "mgsub", 
+                "tictoc", "openxlsx")
+  
+  # Identify the packages that need to be installed
+  packages_to_install <- packages[!packages %in% installed.packages()[,"Package"]]
+  
+  # Install the missing packages
+  if(length(packages_to_install)) install.packages(packages_to_install)
+  
 }
 
 #load libraries
 {
-  library(dplyr)
-  library(tidyr)
-  library(stringr)
-  library(data.table)
-  library(readr)
-  library(assertive)
-  library(readxl)
-  library(jsonlite)
-  library(stringi)
-  library(purrr)
-  library(ggmap)
-  library(jsonlite)
-  library(leaflet)
-  library(xml2)
-  library(rvest)
-  library(sf)
-  library(tm)
-  library(stringdist)
-  library(mgsub)
-  library(tictoc)
+  # Load the libraries
+  lapply(packages, require, character.only = TRUE)
 }
 
 #set environment parameters
@@ -62,6 +36,7 @@
 #resources
 {
   #path to source files
+  path_2023 <- "resources/ZNO_2010-2020/NMT2023/Odata2023File.csv"
   path_2022 <- "resources/ZNO_2010-2020/NMT2022/Odata2022File.csv"
   path_2021 <- "resources/ZNO_2010-2020/ZNO2021/Odata2021File.csv"
   path_2020 <- "resources/ZNO_2010-2020/ZNO2020/Odata2020File.csv"
@@ -141,19 +116,25 @@
   subjects <- c("uml","ukr","hist","math","mst","phys","chem","bio",
                 "geo","eng","fra","deu","spa","rus")
   
-  #links to institutions data
+  #links to institutions data API
   inst_links_list <- list(
     schools_api="https://registry.edbo.gov.ua/api/institutions/?ut=3&lc=0&exp=json",
     vnz_api="https://registry.edbo.gov.ua/api/universities/?ut=1&lc=0&exp=json",
     ptu_api="https://registry.edbo.gov.ua/api/universities/?ut=2&lc=0&exp=json",
     pre_vnz_api="https://registry.edbo.gov.ua/api/universities/?ut=9&lc=0&exp=json")
   
+  #paths to institutions prepared files
+  path_schools <- "resources/institutions/Заклади загальної середньої освіти.xlsx"
+  path_prevnz <- "resources/institutions/Заклади фахової передвищої освіти.xlsx"
+  path_colleges <- "resources/institutions/Заклади професійної (професійно-технічної) освіти.xlsx"
+  path_vnz <- "resources/institutions/Заклади вищої освіти.xlsx"
+  
   #links to Nomnatim search API
   nomin_url_start <- "https://nominatim.openstreetmap.org/search?q="
   nomin_url_end <- "&format=jsonv2&addressdetails=1&accept-language=ua&countrycodes=ua&dedupe=0"
   
   #path to new ATU geojsons
-  path_hromadas <- "resources/OSM data/terhromad.geojson"
+  path_hromadas <- "resources/OSM data/terhromad_1.geojson"
   path_rayons <- "resources/OSM data/rayon.geojson"
   path_oblast <- "resources/OSM data/oblast.geojson"
   
@@ -169,6 +150,7 @@
   institutions <- "resources/institutions/institutions.csv"
   institutions_occupied <- "resources/institutions/institutions_occup.csv"
   institutions_full <- "resources/institutions/institutions_full.csv"
+  institutions_dictionary <- "resources/institutions/institutions_dictionary.csv"
   
 }
 
@@ -179,18 +161,17 @@
     
     tic("removing extra symbols")
     
-    #remove new lines,quotes,apostrophe
-    pat1 <- '\\n|\"|\u00AB|\u00BB|\u201E|\u201D'
-    pat2 <- '\u0060|’'
-    pat3 <- '\\/'
-    data <- data %>% mutate(across(everything(),
-                                   ~stri_replace_all_regex(.,c(pat1,pat2,pat3),
-                                                          c("","'","-"),
-                                                          vectorize_all = FALSE)))
-    # data <- data %>% 
-    #   mutate_all(~stringr::str_replace_all(.,"\\n|\"|\u00AB|\u00BB|\u201E|\u201D|\u0060|\u2019|\\/","")) %>% 
-    #   mutate_all(~trimws(.))
-
+    # Define patterns and replacements
+    patterns <- c('\\n', '\"', '\u00AB', '\u00BB', '\u201E', '\u201D',
+                  '\u0060', '’', '\\/')
+    replacements <- c("", "", "", "", "", "", "'", "'", "-")
+    
+    # Apply stringi's stri_replace_all_regex function across all columns
+    data <- data %>% mutate(across(everything(), 
+                                   ~stri_replace_all_regex(., patterns, 
+                                                           replacements, 
+                                                           vectorize_all = FALSE)))
+    
     #remove leading and trailing spaces
     data <- data %>% mutate(across(everything(),~ trimws(.)))
     
@@ -207,33 +188,44 @@
     
     t_exc <- read_csv(path_toponimics_exception,
                       col_types = cols(.default = "c"))
-    
-    d <- data.frame()
-    
-    for(i in 1:nrow(t_exc)) {
-      
-       f_d <- data[get(cols_targ$reg)==t_exc$regname[i] & 
-                   get(cols_targ$area)==t_exc$areaname[i] & 
-                   get(cols_targ$ter)==t_exc$tername[i] & 
-                   eoname %like% t_exc$marker[i]] %>% 
-                mutate(KOATUU_first=t_exc$KOATUU_first[i],
-                        KOATUU_second=t_exc$KOATUU_second[i],
-                        KOATUU_third=t_exc$KOATUU_third[i],
-                        KOATUU_fourth=t_exc$KOATUU_fourth[i],
-                        !!cols_targ$ter:=t_exc$new_tername[i],
-                        !!cols_targ$area:=t_exc$new_areaname[i])
-      
-       d <- bind_rows(d,f_d)
-      
+
+    process_row <- function(reg, area, ter, marker, KOATUU_first, KOATUU_second,
+                            KOATUU_third, KOATUU_fourth, new_tername, new_areaname) {
+      f_d <- data[get(cols_targ$reg) == reg &
+                    get(cols_targ$area) == area &
+                    get(cols_targ$ter) == ter &
+                    eoname %like% marker] %>%
+        mutate(KOATUU_first = KOATUU_first,
+               KOATUU_second = KOATUU_second,
+               KOATUU_third = KOATUU_third,
+               KOATUU_fourth = KOATUU_fourth,
+               !!cols_targ$ter := new_tername,
+               !!cols_targ$area := new_areaname)
+      return(f_d)
     }
     
-    d <- d %>% distinct(outid,.keep_all = TRUE)
-    data <- data %>% distinct(outid,.keep_all = TRUE)
+    d <- t_exc %>%
+      rowwise() %>%
+      do(process_row(.$regname,
+                     .$areaname,
+                     .$tername,
+                     .$marker,
+                     .$KOATUU_first,
+                     .$KOATUU_second,
+                     .$KOATUU_third,
+                     .$KOATUU_fourth,
+                     .$new_tername,
+                     .$new_areaname)) %>%
+      ungroup()
     
-    data <- data[!d, on="outid"] %>% bind_rows(.,d)
+    d <- d %>% distinct(outid, .keep_all = TRUE)
+    
+    data <- data %>% distinct(outid, .keep_all = TRUE)
+    
+    data <- data[!as.data.table(d), on="outid"] %>% bind_rows(.,d)
     
     toc(log=TRUE)
-    
+
     return(data)
     
   }
@@ -243,7 +235,7 @@
     
     tic("rename obsolete toponyms")
     
-    #fixing number of columns for dataset
+    # #fixing number of columns for dataset
     colnum <- ncol(data)
     
     #read file with old-new toponyms mapping
@@ -251,24 +243,24 @@
     
     #old-new map for counties(areas)
     topon_areas <- toponimics[is.na(ter_old) & is.na(ter_new) & !is.na(region),]
-    
+
     #old-new map for big towns
     topon_towns <- toponimics[!is.na(ter_old) & !is.na(ter_new) & !is.na(area_old) & !is.na(area_new),]
-    
+
     #old-new map for villages and small towns
     topon_villages <- toponimics[!is.na(ter_old) & !is.na(ter_new) & is.na(area_old),]
-    
+
     #old-new map for settlements subsequent to regional towns
     topon_subsequent <- toponimics[is.na(ter_old) & !is.na(ter_new),]
-    
+
     #rename old counties (areas)
     areas <- data[topon_areas,on=c(paste0(cols_list$reg,"==","region"),
-                                   paste0(cols_list$area,"==","area_old")),nomatch=0] %>% 
-      mutate(across(.cols = matches(paste0('^',cols_list$area)), ~ area_new)) %>% 
+                                   paste0(cols_list$area,"==","area_old")),nomatch=0] %>%
+      mutate(across(.cols = matches(paste0('^',cols_list$area)), ~ area_new)) %>%
       select(1:all_of(colnum))
-    
+
     data <- data[!areas,on="outid"] %>% bind_rows(.,areas)
-    
+
     #rename principal towns and its districts
     town_dist <- data[topon_towns,on=c(paste0(cols_list$reg,"==","region"),
                                        paste0(cols_list$area,"==","area_old"),
@@ -276,9 +268,9 @@
       mutate(across(.cols = matches(paste0('^',cols_list$area)), ~ area_new)) %>%
       mutate(across(.cols = matches(paste0('^',cols_list$ter)), ~ ter_new)) %>%
       select(1:all_of(colnum))
-    
+
     data <- data[!town_dist, on="outid"] %>% bind_rows(., town_dist)
-    
+
     #rename villages and small towns
     villages_dist <- data[topon_villages,
                           on=c(paste0(cols_list$reg,"==","region"),
@@ -288,7 +280,7 @@
       select(1:all_of(colnum))
 
     data <- data[!villages_dist, on="outid"] %>% bind_rows(.,villages_dist)
-    
+
     #rename subsequent settlments
     subs_dist <- data[topon_subsequent,
                       on=c(paste0(cols_list$reg,"==","region"),
@@ -298,9 +290,9 @@
       select(1:all_of(colnum))
 
     data <- data[!subs_dist, on="outid"] %>% bind_rows(., subs_dist)
-    
+
     toc(log=TRUE)
-    
+
     return(data)
     
   }
@@ -311,16 +303,13 @@
     tic("preparing KOATUU dataset")
     
     #read KOATUU json from internet and rename columns
-    KOATUU <- as.data.frame(fromJSON(KOATUU_path)) %>% 
+    KOATUU <- as.data.frame(jsonlite::fromJSON(KOATUU_path)) %>% 
       rename(KOATUU_first=`Перший рівень`,
              KOATUU_second=`Другий рівень`,
              KOATUU_third=`Третій рівень`,
              KOATUU_fourth=`Четвертий рівень`,
              category=`Категорія`,
-             name=`Назва об'єкта українською мовою`)
-    
-    #make the toponymic names comparable
-    KOATUU <- KOATUU %>% 
+             name=`Назва об'єкта українською мовою`) %>% 
       mutate(across(name, ~ str_replace_all(.,"\\/.*$|^(М\\.)",""))) %>%
       mutate(across(name, ~ str_to_title(.))) %>%
       mutate(across(name, ~ gsub(.,pattern = "Область",replacement = "область"))) %>%
@@ -359,15 +348,8 @@
              KOATUU_code="Код об'єкта КОАТУУ",
              category="Категорія об’єкта",
              name="Назва об’єкта") %>% 
-      filter(category!="Н")
-    
-    #filter only cities districts
-    ATU_compare_dist <- ATU_compare %>% 
-      filter(!category %in% c("О","К","Р"), category=="В") %>% as.data.table()
-    
-    #exclude cities districts
-    ATU_compare_towns <- ATU_compare %>% 
-      filter(!category %in% c("О","К","Р","В")) %>% as.data.table()
+      filter(category!="Н") %>% 
+      as.data.table()
     
     ATU_full <- read_excel(ATU_file, guess_max = 10000) %>% 
       rename(ATU_first='Перший рівень',
@@ -376,21 +358,47 @@
              ATU_fourth='Четвертий рівень',
              ATU_extra='Додатковий рівень',
              category="Категорія об’єкта",
-             name="Назва об’єкта") %>% as.data.table()
+             name="Назва об’єкта") %>% 
+      as.data.table()
     
-    ATU_full_towns <- ATU_full %>% filter(!category %in% c("O","P","K")) %>% as.data.table()
-    
-    
-    ATU_list <- list(ATU_compare_distr=ATU_compare_dist,
-                     ATU_compare_towns=ATU_compare_towns,
-                     ATU_full=ATU_full,
-                     ATU_full_towns=ATU_full_towns,
-                     ATU_compare=ATU_compare)
+    ATU_list <- list(
+      ATU_compare_distr = ATU_compare[!category %in% c("О","К","Р") & category=="В"],
+      ATU_compare_towns = ATU_compare[!category %in% c("О","К","Р","В")],
+      ATU_full = ATU_full,
+      ATU_full_towns = ATU_full[!category %in% c("O","P","K")],
+      ATU_compare = ATU_compare
+    )
     
     toc(log=TRUE)
     
     return(ATU_list)
     
+  }
+  
+  #read ATU codifier file from csv
+  get_ATU_codifier_list <- function(codifier_path) {
+    
+    tic.clearlog()
+    tic("read full ATU codifier")
+    
+    ATU_all <- fread(codifier_path, na.strings = "", encoding = "UTF-8") %>% 
+      setnames(1:5, paste0("ATU_", c("first", "second", "third", "fourth", "extra"))) %>%
+      setnames(6:7, c("category", "name")) %>% 
+      remove_extra_symbols(.) %>% 
+      distinct(ATU_third,category,name, .keep_all = TRUE)
+    
+    ATU <- lapply(list(oblast = category_list$obl, adm = category_list$adm, rajon = category_list$raion, 
+                       hromada = category_list$hrom, settlement = c(category_list$cities, 
+                                                                    category_list$villages, category_list$selusche), 
+                       smt = category_list$smt, misto = category_list$misto, 
+                       village = category_list$villages, selusche=category_list$selusche, 
+                       district = category_list$district), 
+                  function(x) ATU_all[category == x])
+    
+    names(ATU) <- c("oblast", "adm", "rajon", "hromada", "settlement", "smt", "misto", "village", "selusche", "district")
+    
+    toc(log=TRUE)
+    return(ATU)
   }
   
   #read and clean full list of institutions
@@ -425,36 +433,21 @@
     
     tic("composing list of KOATUU levels")
     
-    #prepare subset for regions 
-    first_only <- KOATUU %>% filter(KOATUU_second=="") %>% 
-      select(KOATUU_first,category,name)
+    # Split the data into subsets based on conditions
+    KOATUU_list <- KOATUU %>%
+      group_split(.keep = FALSE,
+        first_only = KOATUU_second == "",
+        first_and_second = KOATUU_second != "" & KOATUU_third == "",
+        first_to_third = KOATUU_third != "" & KOATUU_fourth == "" & category != "",
+        fourth_no_villages = KOATUU_fourth != "" & category != "С" & category != "C",
+        fourth_villages = KOATUU_fourth != "" & category != "Щ" & category != "Т"
+      ) 
     
-    #prepare subset for areas,regions capitals, districts for Kyiv and Sevastopol,
-    #regional towns
-    first_and_second <- KOATUU %>% 
-      filter(KOATUU_second!="",KOATUU_third=="") %>% 
-      select(KOATUU_first,KOATUU_second,category,name)
+    KOATUU_list <- KOATUU_list[- 1] %>%
+      setNames(c("fourth_villages", "fourth_no_villages", "first_to_third",
+                 "first_and_second", "first"))
     
-    #prepare subset for towns and regional towns' districts
-    first_to_third <- KOATUU %>% 
-      filter(KOATUU_third!="",KOATUU_fourth=="", category!="")
-    
-    #prepare subset for small and subsequent towns
-    first_to_fourth_no_villages <- KOATUU %>% 
-      filter(KOATUU_fourth!="",category!="С", category!="C" )
-    
-    #prepare subset for villages
-    first_to_fourth_villages <- KOATUU %>% 
-      filter(KOATUU_fourth!="",category!="Щ", category!="Т" )
-    
-    #make the list of subsets
-    KOATUU_list <- list(first=first_only, 
-                        first_and_second=first_and_second,
-                        first_to_third=first_to_third, 
-                        fourth_no_villages=first_to_fourth_no_villages,
-                        fourth_villages=first_to_fourth_villages)
-    
-    toc(log=TRUE)
+    toc(log = TRUE)
     
     return(KOATUU_list)
     
@@ -474,44 +467,48 @@
     tic("adding KOATUU columns")
     
     #add KOATUU first column
-    data <- data %>% left_join(as.data.table(KOATUU_list$first),by=setNames("name",targ_cols$reg)) %>% 
-      relocate(KOATUU_first,.after = targ_cols$ter) %>% 
+    data <- data[as.data.table(KOATUU_list$first),
+                 on = paste0(targ_cols$reg,"==","name")] %>%
+      relocate(KOATUU_first,.after = targ_cols$ter) %>%
       select(1:(all_of(initial_columns)+1))
-    
+
     #add KOATUU codes to second column for regional towns, Kyiv and Sevastopol districts
-    reg_towns_pr_dist <- data[KOATUU_list$first_and_second, 
-                              on=c("KOATUU_first",paste0(targ_cols$ter,"==","name")),nomatch=0] %>% 
-      relocate(KOATUU_second,.after = KOATUU_first) %>% 
-      select(1:(all_of(initial_columns)+2))
-    
+    reg_towns_pr_dist <- data[as.data.table(KOATUU_list$first_and_second),
+                on = c("KOATUU_first", paste0(targ_cols$ter,"==","name")),
+                nomatch = 0]
+
     #add KOATUU codes to second column for counties (areas)
-    areas <- data[!reg_towns_pr_dist, on=.(outid)][KOATUU_list$first_and_second,
-                                                   on=c("KOATUU_first",paste0(targ_cols$area,"==","name")),nomatch=0] %>% 
-      relocate(KOATUU_second,.after = KOATUU_first) %>% 
+    areas <- data[!reg_towns_pr_dist, 
+                  on=.(outid)][as.data.table(KOATUU_list$first_and_second),
+                               on=c("KOATUU_first",paste0(targ_cols$area,"==","name")),
+                               nomatch=0]
+    
+    data <- bind_rows(reg_towns_pr_dist,areas) %>%
+      relocate(KOATUU_second,.after = KOATUU_first) %>%
       select(1:(all_of(initial_columns)+2))
-    
-    data <- bind_rows(reg_towns_pr_dist,areas)
-    
+
     #make subset for 3rd and 4th KOATUU columns
-    data_with_other_KOATUU <- data[!KOATUU_list$first_and_second,
-                on=c("KOATUU_first",paste0(targ_cols$ter,"==","name"))] %>% 
+    data_with_other_KOATUU <- data[!as.data.table(KOATUU_list$first_and_second),
+                                   on=c("KOATUU_first",paste0(targ_cols$ter,"==","name"))] %>% 
       mutate(KOATUU_third=NA,KOATUU_fourth=NA) %>%
-      select(1:KOATUU_fourth,everything())
-    
+      select(1:KOATUU_fourth,everything()) %>% 
+      as.data.table()
+
     #KOATUU first and second only subset
     data_with_firs_and_sec_only <- data[!data_with_other_KOATUU,on="outid"] %>%
       select(1:KOATUU_second,everything())
     
     #add KOATUU 3rd and 4th columns for small and subsequent towns
-    t_and_f_wo_villages <- data_with_other_KOATUU[KOATUU_list$fourth_no_villages,
-                 on=c("KOATUU_first","KOATUU_second",
-                      paste0(targ_cols$ter,"==","name")),nomatch=0] %>% 
+    t_and_f_wo_villages <- data_with_other_KOATUU[as.data.table(KOATUU_list$fourth_no_villages),
+                            on=c("KOATUU_first","KOATUU_second",
+                            paste0(targ_cols$ter,"==","name")),nomatch=0] %>% 
       mutate(KOATUU_third=i.KOATUU_third, KOATUU_fourth=i.KOATUU_fourth)
     
     #add KOATUU 3rd and 4th columns for villages
-    t_and_f_villages <- data_with_other_KOATUU[!t_and_f_wo_villages, on="outid"][KOATUU_list$fourth_villages,
-                 on=c("KOATUU_first","KOATUU_second",
-                     paste0(targ_cols$ter,"==","name")),nomatch=0] %>% 
+    t_and_f_villages <- data_with_other_KOATUU[!as.data.table(t_and_f_wo_villages), 
+                            on="outid"][as.data.table(KOATUU_list$fourth_villages),
+                            on=c("KOATUU_first","KOATUU_second",
+                            paste0(targ_cols$ter,"==","name")),nomatch=0] %>% 
       mutate(KOATUU_third=i.KOATUU_third, KOATUU_fourth=i.KOATUU_fourth)
     
     t_and_f <- bind_rows(t_and_f_wo_villages,t_and_f_villages) %>% 
@@ -521,9 +518,9 @@
     data_only_third<- data_with_other_KOATUU[!t_and_f, on="outid"]
     
     #add KOATUU 3rd column for towns and districts of regionals towns
-    third <- data_only_third[KOATUU_list$first_to_third,
-                 on=c("KOATUU_first","KOATUU_second",
-                      paste0(targ_cols$ter,"==","name")),nomatch=0] %>% 
+    third <- data_only_third[as.data.table(KOATUU_list$first_to_third),
+                             on=c("KOATUU_first","KOATUU_second",
+                                  paste0(targ_cols$ter,"==","name")),nomatch=0] %>% 
       mutate(KOATUU_third=i.KOATUU_third) %>% 
       relocate(KOATUU_third,.after = KOATUU_second)
     
@@ -568,83 +565,133 @@
     
     #initial <- data
     
+    # initial_rows <- nrow(data)
+    # 
+    # ATU_list <- get_ATU_data(comp_path,full_path)
+    # 
+    # tic("adding ATU columns to general dataset")
+    # 
+    # col4 <- paste0(cols_pref,"_","KOATUU_fourth")
+    # col3 <- paste0(cols_pref,"_","KOATUU_third")
+    # col2 <- paste0(cols_pref,"_","KOATUU_second")
+    # col1 <- paste0(cols_pref,"_","KOATUU_first")
+    # 
+    # dist_one <- data[is.na(get(col4)),][ATU_list$ATU_compare_distr,
+    #                      on=paste0(col3,"==","KOATUU_code"),nomatch=0]
+    # 
+    # dist_two <- data[is.na(get(col3)),][ATU_list$ATU_compare_distr,
+    #                         on=paste0(col2,"==","KOATUU_code"),nomatch=0]
+    # 
+    # dist <- bind_rows(dist_one,dist_two) %>% 
+    #   rename_with(.cols=contains("ATU_code"),~ str_c(cols_pref,"_","ATU_extra"))
+    # 
+    # towns_one <- data[!is.na(get(col4)),][ATU_list$ATU_compare_towns,
+    #                             on=paste0(col4,"==","KOATUU_code"),nomatch=0]
+    # 
+    # towns_two <- data[is.na(get(col4)),][ATU_list$ATU_compare_towns,
+    #                             on=paste0(col3,"==","KOATUU_code"),nomatch=0]
+    # 
+    # towns_three <- data[is.na(get(col3)),][ATU_list$ATU_compare_towns,
+    #                             on=paste0(col2,"==","KOATUU_code"),nomatch=0]
+    # 
+    # towns <- bind_rows(towns_one,towns_two,towns_three) %>% 
+    #   rename_with(.cols=contains("ATU_code"),~ str_c(cols_pref,"_","ATU_fourth"))
+    # 
+    # data <- bind_rows(dist,towns) %>% 
+    #   relocate(str_c(cols_pref,"_","ATU_fourth"),str_c(cols_pref,"_","ATU_extra"), 
+    #            .after = str_c(cols_pref,"_","KOATUU_fourth")) %>% 
+    #   select(-c(name,category))
+    # 
+    # prepared_ATU_distr <- ATU_list$ATU_full_towns %>% 
+    #   filter(category=="B")
+    # 
+    # prepared_ATU <- ATU_list$ATU_full_towns %>% 
+    #   filter(category!="B")
+    # 
+    # fcole=paste0(cols_pref,"_","ATU_extra")
+    # fcol4=paste0(cols_pref,"_","ATU_fourth")
+    # 
+    # 
+    # final_one <- data[complete.cases(data[,get(fcole)]),][prepared_ATU_distr,
+    #                          on=paste0(fcole,"==","ATU_extra"),nomatch=0] %>% 
+    #   select(-(str_c(cols_pref,"_","ATU_fourth"))) %>% 
+    #   rename_with(.cols=starts_with("ATU_fourth"), ~ str_c(cols_pref,"_",.))
+    # 
+    # final_two <- data[!complete.cases(data[,get(fcole)]),][prepared_ATU,
+    #                             on=paste0(fcol4,"==","ATU_fourth"),nomatch=0] %>% 
+    #   rename_with(.cols=starts_with("ATU_fourth"), ~ str_c(cols_pref,"_",.))
+    # 
+    # data <- bind_rows(final_one,final_two) %>% 
+    #   select(-c(category,name, ATU_extra)) %>% 
+    #   rename_with(.cols=starts_with("ATU_"),~ str_c(cols_pref,"_",.)) %>% 
+    #   relocate(str_c(cols_pref,"_","ATU_first"):str_c(cols_pref,"_","ATU_third"),
+    #            str_c(cols_pref,"_","ATU_fourth"),
+    #            .after = str_c(cols_pref,"_","KOATUU_fourth"))
+    # 
+    # #return(list(initial,data))
+    # 
+    # if(cols_pref!="school") {
+    #   
+    #   #make sure that number of rows hasn't changed
+    #   assert_all_are_equal_to(initial_rows,nrow(data))
+    #   
+    # }
+    # 
+    # toc(log=TRUE)
+    # 
+    # return(data)
+    
     initial_rows <- nrow(data)
     
-    ATU_list <- get_ATU_data(comp_path,full_path)
+    ATU_list <- get_ATU_data(comp_path, full_path)
     
-    tic("adding ATU columns to general dataset")
+    cols <- paste0(cols_pref, "_", c("KOATUU_fourth", "KOATUU_third", "KOATUU_second", "KOATUU_first"))
     
-    col4 <- paste0(cols_pref,"_","KOATUU_fourth")
-    col3 <- paste0(cols_pref,"_","KOATUU_third")
-    col2 <- paste0(cols_pref,"_","KOATUU_second")
-    col1 <- paste0(cols_pref,"_","KOATUU_first")
+    dist_towns <- lapply(cols, function(col) {
+      na_rows <- is.na(get(col, data))
+      bound_data <- bind_rows(data[na_rows, ][ATU_list$ATU_compare_distr, on = paste0(col, "==", "KOATUU_code"), nomatch = 0],
+                              data[na_rows, ][ATU_list$ATU_compare_towns, on = paste0(col, "==", "KOATUU_code"), nomatch = 0]) %>%
+        rename_with(.cols = contains("ATU_code"), ~ str_c(cols_pref, "_", "ATU", toupper(substr(col, -1, -1))))
+      return(bound_data)
+    }) %>%
+      bind_rows()
     
-    dist_one <- data[is.na(get(col4)),][ATU_list$ATU_compare_distr,
-                         on=paste0(col3,"==","KOATUU_code"),nomatch=0]
-
-    dist_two <- data[is.na(get(col3)),][ATU_list$ATU_compare_distr,
-                            on=paste0(col2,"==","KOATUU_code"),nomatch=0]
+    data <- bind_rows(dist_towns) %>%
+      relocate(sprintf("%s_ATU_D", cols_pref), sprintf("%s_ATU_F", cols_pref), .after = sprintf("%s_KOATUU_fourth", cols_pref)) %>%
+      select(-c(name, category))
     
-    dist <- bind_rows(dist_one,dist_two) %>% 
-      rename_with(.cols=contains("ATU_code"),~ str_c(cols_pref,"_","ATU_extra"))
+    prepared_ATU_distr <- ATU_list$ATU_full_towns %>%
+      filter(category == "B")
     
-    towns_one <- data[!is.na(get(col4)),][ATU_list$ATU_compare_towns,
-                                on=paste0(col4,"==","KOATUU_code"),nomatch=0]
+    prepared_ATU <- ATU_list$ATU_full_towns %>%
+      filter(category != "B")
     
-    towns_two <- data[is.na(get(col4)),][ATU_list$ATU_compare_towns,
-                                on=paste0(col3,"==","KOATUU_code"),nomatch=0]
+    fcole = paste0(cols_pref, "_", "ATU_F")
+    fcol4 = paste0(cols_pref, "_", "ATU_D")
     
-    towns_three <- data[is.na(get(col3)),][ATU_list$ATU_compare_towns,
-                                on=paste0(col2,"==","KOATUU_code"),nomatch=0]
+    final_data <- lapply(c(fcole, fcol4), function(fcol) {
+      na_rows <- complete.cases(data[, get(fcol)])
+      bound_data <- bind_rows(data[na_rows, ][prepared_ATU_distr, on = paste0(fcol, "==", "ATU_F"), nomatch = 0] %>%
+                                select(-str_c(cols_pref, "_", "ATU_D")) %>%
+                                rename_with(.cols = starts_with("ATU_F"), ~ str_c(cols_pref, "_", .)),
+                              data[!na_rows, ][prepared_ATU, on = paste0(fcol, "==", "ATU_D"), nomatch = 0] %>%
+                                rename_with(.cols = starts_with("ATU_D"), ~ str_c(cols_pref, "_", .))) %>%
+        select(-c(category, name), -str_c(cols_pref, "_ATU_F"))
+    }) %>%
+      bind_rows()
     
-    towns <- bind_rows(towns_one,towns_two,towns_three) %>% 
-      rename_with(.cols=contains("ATU_code"),~ str_c(cols_pref,"_","ATU_fourth"))
+    final_data <- final_data %>%
+      rename_with(.cols = starts_with("ATU_"), ~ str_c(cols_pref, "_", .)) %>%
+      relocate(str_c(cols_pref, "_", "ATU_first"):str_c(cols_pref, "_", "ATU_third"),
+               str_c(cols_pref, "_", "ATU_fourth"),
+               .after = str_c(cols_pref, "_", "KOATUU_fourth"))
     
-    data <- bind_rows(dist,towns) %>% 
-      relocate(str_c(cols_pref,"_","ATU_fourth"),str_c(cols_pref,"_","ATU_extra"), 
-               .after = str_c(cols_pref,"_","KOATUU_fourth")) %>% 
-      select(-c(name,category))
-    
-    prepared_ATU_distr <- ATU_list$ATU_full_towns %>% 
-      filter(category=="B")
-    
-    prepared_ATU <- ATU_list$ATU_full_towns %>% 
-      filter(category!="B")
-    
-    fcole=paste0(cols_pref,"_","ATU_extra")
-    fcol4=paste0(cols_pref,"_","ATU_fourth")
-    
-    
-    final_one <- data[complete.cases(data[,get(fcole)]),][prepared_ATU_distr,
-                             on=paste0(fcole,"==","ATU_extra"),nomatch=0] %>% 
-      select(-(str_c(cols_pref,"_","ATU_fourth"))) %>% 
-      rename_with(.cols=starts_with("ATU_fourth"), ~ str_c(cols_pref,"_",.))
-    
-    final_two <- data[!complete.cases(data[,get(fcole)]),][prepared_ATU,
-                                on=paste0(fcol4,"==","ATU_fourth"),nomatch=0] %>% 
-      rename_with(.cols=starts_with("ATU_fourth"), ~ str_c(cols_pref,"_",.))
-    
-    data <- bind_rows(final_one,final_two) %>% 
-      select(-c(category,name, ATU_extra)) %>% 
-      rename_with(.cols=starts_with("ATU_"),~ str_c(cols_pref,"_",.)) %>% 
-      relocate(str_c(cols_pref,"_","ATU_first"):str_c(cols_pref,"_","ATU_third"),
-               str_c(cols_pref,"_","ATU_fourth"),
-               .after = str_c(cols_pref,"_","KOATUU_fourth"))
-    
-    #return(list(initial,data))
-    
-    if(cols_pref!="school") {
-      
-      #make sure that number of rows hasn't changed
-      assert_all_are_equal_to(initial_rows,nrow(data))
-      
+    if (cols_pref != "school") {
+      stopifnot(identical(initial_rows, nrow(final_data)))
     }
     
-    toc(log=TRUE)
-    
-    return(data)
+    return(final_data)
     
   }
   
 }
-

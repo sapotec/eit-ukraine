@@ -6,10 +6,10 @@ source("global.R")
   read_ATU_comparator <- function(comparator_path) {
     
     ATU_compare <- read_excel(comparator_path) %>% 
-      rename(ATU_code='РљРѕРґРёС„С–РєР°С‚РѕСЂ',
-             KOATUU_code="РљРѕРґ РѕР±'С”РєС‚Р° РљРћРђРўРЈРЈ",
-             category="РљР°С‚РµРіРѕСЂС–СЏ РѕР±вЂ™С”РєС‚Р°",
-             name="РќР°Р·РІР° РѕР±вЂ™С”РєС‚Р°")
+      rename(ATU_code='Кодифікатор',
+             KOATUU_code="Код об'єкта КОАТУУ",
+             category="Категорія об’єкта",
+             name="Назва об’єкта")
     
     return(ATU_compare)
     
@@ -46,7 +46,7 @@ source("global.R")
       
     
     #pattern for clearing address column
-    patterns <- c("РЅР°Р±\\.|РєС–РјРЅР°С‚Р°|РјР°Р№РґР°РЅ|РІСѓР»\\.|РІСѓР»РёС†СЏ|Р’РЈР›РР¦РЇ|РєРІР°СЂС‚РёСЂР°|РїСЂРѕРІСѓР»РѕРє|РїСЂРѕСЃРї\\.|РїСЂРѕСЃРїРµРєС‚ |РїСЂРѕРІ\\.|Р±СѓРґ\\.|РїР».|РџР›РћР©Рђ|Р±СѓРґРёРЅРѕРє|Р°Р»\\.|РїСЂ-РєС‚|^Р±-СЂ|\\*|\\r \\n")
+    patterns <- c("наб\\.|кімната|майдан|вул\\.|вулиця|ВУЛИЦЯ|квартира|провулок|просп\\.|проспект |пров\\.|буд\\.|пл.|ПЛОЩА|будинок|ал\\.|пр-кт|^б-р|\\*|\\r \\n")
     
     #clear address column
     inst <- inst %>% 
@@ -89,7 +89,7 @@ source("global.R")
       
       print(str_c("no:",i," address: ",address_query[i]))
       
-      query <- str_c(nomin_url_start,address_query[i],nomin_url_end)
+      query <-  URLencode(str_c(nomin_url_start,address_query[i],nomin_url_end))
       
       output <- as.data.frame(fromJSON(query))
       
@@ -121,20 +121,25 @@ source("global.R")
   assert_final_inst_dataset <- function(data) {
     
     # assert NA for required fields
-    required_string <- "EDEBO_id|full_name|^type|ATU_code|long|lat|occupied"
+    required_string <- "EDEBO_id|full_name|^type|ATU_first|ATU_second|ATU_third|ATU_fourth|long|lat|occupied"
     assert_all_are_not_na(data %>% select(matches(required_string)))
     
     #check duplicates in EDEBO ids
     assert_all_are_equal_to(sum(duplicated(data$EDEBO_id)),0)
     
     #institutions types numbers
-    assert_all_are_equal_to(nlevels(data$type),70)
+    assert_all_are_equal_to(nlevels(data$status),7)
     
     #occupied or non-occupied territory
-    assert_all_are_equal_to(nlevels(data$occupied),2)
+    assert_all_are_equal_to(nlevels(data$closed),2)
     
     #check the wrong ATU categories
-    assert_all_are_equal_to(nlevels(data$category),6)
+    assert_all_are_equal_to(nlevels(data$property),4)
+    
+    assert_all_are_not_na(c(insts$EDEBO_id,insts$inst_name,insts$type, 
+                            insts$status,insts$property,insts$ATU_first,
+                            insts$ATU_second,insts$ATU_third,
+                            insts$ATU_fourth, insts$long,insts$lat,insts$occupied))
     
   }
   
@@ -148,7 +153,7 @@ source("global.R")
     
     initial_rows <- nrow(data)
     
-    ATU <- read_ATU_comparator(ATU_c_file) %>% filter(category!="Рќ")
+    ATU <- read_ATU_comparator(ATU_c_file) %>% filter(category!="Н")
     
     data <- data %>% 
       inner_join(ATU, by=c("koatuu_id"="KOATUU_code")) %>% 
@@ -182,7 +187,7 @@ source("global.R")
     inst_res <- data_frame()
     
     ATU_compare <- read_ATU_comparator(ATU_comp_file) %>% 
-      filter(!category %in% c("РЎ","РҐ"))
+      filter(!category %in% c("С","Х"))
     
     for(i in 1:nrow(data)) {
       
@@ -265,30 +270,31 @@ source("global.R")
     #read hromadas geojson
     hromadas <- sf::st_read(hromad_map, stringsAsFactors = FALSE)
     
+    sf::st_make_valid(hromadas)
+    
     #read rayon geojson
     rayons <- sf::st_read(rayon_map, stringsAsFactors = FALSE)
+    
+    sf::st_make_valid(rayons)
     
     #read oblast geojson
     oblasts <- sf::st_read(oblast_map, stringsAsFactors = FALSE)
     
-    #filter Kyiv and Sevastopol and read geodata
-    insts_Kyiv_Sev <- data %>% filter(is.na(hromada)) %>% 
-      st_as_sf(.,coords = c("long","lat"))
+    sf::st_make_valid(oblasts)
     
     #filter hromadas and read geodata
-    insts_others <- data %>% filter(!is.na(hromada)) %>% 
-      st_as_sf(.,coords = c("long","lat"))
-    
+    insts <- data %>% st_as_sf(.,coords = c("long","lat"))
     
     #make CRS for institutions geocodes against hromadas polygons
-    st_crs(insts_others) <- st_crs(hromadas)
+    st_crs(insts) <- st_crs(hromadas)
+    
     
     #compare institutions geocodes against hromadas polygons
-    hromadas_output <- st_join(insts_others,hromadas) 
+    hromadas_output <- st_join(insts,hromadas) 
+    
     
     #find if any institutions doesn't fall into proper hromada's boundaries
-    hromadas_fail <- hromadas_output %>% 
-      filter(str_sub(ATU_code,1,-11)!=str_sub(COD_3,1,-11))
+    hromadas_fail <- hromadas_output %>% filter(ATU_third!=COD_3)
     
     #return(hromadas_fail)
     
@@ -297,28 +303,30 @@ source("global.R")
     
     
     #make CRS for institutions geocodes against rayons polygons
-    st_crs(insts_others) <- st_crs(rayons)
+    st_crs(insts) <- st_crs(rayons)
     
     #compare institutions geocodes against hromadas polygons
-    rayons_output <- st_join(insts_others,rayons) 
+    rayons_output <- st_join(insts,rayons) 
     
     #find if any institutions doesn't fall into proper rayon's boundaries
-    rayons_fail <- rayons_output %>% 
-      filter(str_sub(ATU_code,1,-14)!=str_sub(COD_2,1,-14))
+    rayons_fail <- rayons_output %>% filter(ATU_second!=COD_2)
+    
+    #return(rayons_fail)
     
     #assert all institutions within proper rayons
     assert_all_are_equal_to(nrow(rayons_fail),0)
     
     
     #make CRS for institutions geocodes Kyiv,Sevastopol against rayons polygons
-    st_crs(insts_Kyiv_Sev) <- st_crs(oblasts)
+    st_crs(insts) <- st_crs(oblasts)
     
     #compare institutions geocodes against hromadas polygons
-    oblast_output <- st_join(insts_Kyiv_Sev,oblasts) 
+    oblast_output <- st_join(insts,oblasts) 
     
     #find if any institutions doesn't fall into proper rayon's boundaries
-    oblast_fail <- oblast_output %>% 
-      filter(str_sub(ATU_code,1,-16)!=str_sub(COD_1,1,-16))
+    oblast_fail <- oblast_output %>% filter(ATU_first!=COD_1)
+    
+    #return(oblast_fail)
     
     #assert all institutions within proper rayons
     assert_all_are_equal_to(nrow(oblast_fail),0)
@@ -373,7 +381,7 @@ source("global.R")
   #bind occupied and active schools
   # inst_full <- bind_rows(inst_closed,insts) %>% 
   #     mutate(across(full_name, 
-  #                   ~str_replace_all(.x,c("I"="Р†","вЂћ|вЂќ"="","`"="'"))))
+  #                   ~str_replace_all(.x,c("I"="І","„|”"="","`"="'"))))
   # 
   inst_name <- fread(inst_names, colClasses=c("character"))
   
@@ -389,12 +397,454 @@ source("global.R")
   #write to institutions full file
   write_csv(ins,institutions_full,quote_escape = "none")
   
+}
+
+#actualize institutions and their geodata
+{
+  
+  #prepare dataset from files 
+  {
+    #read initial datasets from files
+    schools <- read.xlsx(path_schools,sheet=1,startRow = 1) %>% 
+      mutate(across(everything(),~ gsub("[\"]|«|»|&quot;|“","",.x))) %>% 
+      rename(inst_name=1,EDEBO_id=2,short=4,status=5,type=6,property=7,
+             KOATUU=8,reg=9,ter=10,address=11,parent=13) %>% 
+      mutate(town = str_extract(ter, "\\b([А-ЯІЇЄҐ][а-яіїєґ'’]*[ -]?)+\\b")) %>% 
+      select(EDEBO_id,inst_name,short,type,status,property,parent,reg,town,KOATUU,address) %>% 
+      mutate(across(c(type,status,property),~ as.factor(.x)))
+    
+    prevnz <- read.xlsx(path_prevnz,sheet=1,startRow = 1) %>% 
+      mutate(across(everything(),~ gsub("[\"]|«|»|&quot;|“","",.x))) %>%
+      mutate(across(everything(),~ gsub("&apos;","'",.x))) %>%
+      rename(inst_name=1,EDEBO_id=2,short=4,status=21,type=8,property=9,
+             ATU=12,reg=14,town=13,address=15,parent=10) %>% 
+      mutate(across(reg,~ gsub(" обл."," область",.x))) %>%
+      mutate(across(c(reg,town), ~gsub("м. |смт. |с. ","",.x))) %>% 
+      select(EDEBO_id,inst_name,short,type,status,property,parent,reg,town,ATU,address) %>% 
+      mutate(status = case_when(is.na(status) ~ "працює",
+                                !is.na(status) ~ "призупинено")) %>% 
+      mutate(across(c(type,status,property),~ as.factor(.x)))
+    
+    vnz <- read.xlsx(path_vnz,sheet=1,startRow = 1) %>% 
+      mutate(across(everything(),~ gsub("[\"]|«|»|&quot;|“","",.x))) %>%
+      mutate(across(everything(),~ gsub("&apos;","'",.x))) %>%
+      rename(inst_name=1,EDEBO_id=2,short=4,status=21,type=8,property=9,
+             ATU=12,reg=14,town=13,address=15,parent=10) %>% 
+      mutate(across(reg,~ gsub(" обл."," область",.x))) %>%
+      mutate(across(c(reg,town), ~gsub("м. |смт. |с. ","",.x))) %>% 
+      select(EDEBO_id,inst_name,short,type,status,property,parent,reg,town,ATU,address) %>% 
+      mutate(status = case_when(is.na(status) ~ "працює",
+                                !is.na(status) ~ "призупинено")) %>% 
+      mutate(across(c(type,status,property),~ as.factor(.x)))
+    
+    colleges <- read.xlsx(path_colleges,sheet=1,startRow = 1) %>% 
+      mutate(across(everything(),~ gsub("[\"]|«|»|&quot;|“","",.x))) %>%
+      mutate(across(everything(),~ gsub("&apos;","'",.x))) %>%
+      rename(inst_name=1,EDEBO_id=2,short=4,status=21,type=8,property=9,
+             ATU=12,reg=14,town=13,address=15,parent=10) %>% 
+      mutate(across(reg,~ gsub(" обл."," область",.x))) %>%
+      mutate(across(c(reg,town), ~gsub("м. |смт. |с. ","",.x))) %>% 
+      select(EDEBO_id,inst_name,short,type,status,property,parent,reg,town,ATU,address) %>% 
+      mutate(status = case_when(is.na(status) ~ "працює",
+                                !is.na(status) ~ "призупинено")) %>% 
+      mutate(across(c(type,status,property),~ as.factor(.x)))
+    
+    
+    #read ATU codifier from file
+    ATU <- get_ATU_codifier_list(csv_ATU_codifier)
+    
+    #add ATU to colleges dataset
+    colleges_dist <- colleges %>% inner_join(ATU$district, by=c("ATU"="ATU_extra")) %>% 
+      rename(town_district=name) %>% 
+      mutate(ATU_extra=ATU) %>% 
+      select(-ATU)
+    
+    colleges_towns <- colleges %>% anti_join(colleges_dist,by="EDEBO_id") %>% 
+      inner_join(ATU$settlement,by=c("ATU"="ATU_fourth")) %>% 
+      rename(town_district=name) %>% 
+      mutate(ATU_fourth=ATU) %>% 
+      select(-ATU)
+    
+    colleges_full <- bind_rows(colleges_dist,colleges_towns)
+    
+    #adjust source file until it's 0
+    assert_all_are_equal_to(nrow(colleges %>% 
+                                   anti_join(colleges_full,by="EDEBO_id") %>%
+                                   group_by(ATU) %>% tally()),0)
+    
+    
+    #add ATU to vnz dataset
+    vnz_dist <- vnz %>% inner_join(ATU$district, by=c("ATU"="ATU_extra")) %>% 
+      rename(town_district=name) %>% 
+      mutate(ATU_extra=ATU) %>% 
+      select(-ATU)
+    
+    vnz_towns <- vnz %>% anti_join(vnz_dist,by="EDEBO_id") %>% 
+      inner_join(ATU$settlement,by=c("ATU"="ATU_fourth")) %>% 
+      rename(town_district=name) %>% 
+      mutate(ATU_fourth=ATU) %>% 
+      select(-ATU)
+    
+    vnz_full <- bind_rows(vnz_dist,vnz_towns)
+    
+    #adjust source file until it's 0
+    assert_all_are_equal_to(nrow(vnz %>% 
+                                   anti_join(vnz_full,by="EDEBO_id") %>% 
+                                   group_by(ATU) %>% tally()),0)
+    
+    
+    #add ATU to pre_vnz dataset
+    prevnz_dist <- prevnz %>% inner_join(ATU$district, by=c("ATU"="ATU_extra")) %>% 
+      rename(town_district=name) %>% 
+      mutate(ATU_extra=ATU) %>% 
+      select(-ATU)
+    
+    prevnz_towns <- prevnz %>% anti_join(prevnz_dist,by="EDEBO_id") %>% 
+      inner_join(ATU$settlement,by=c("ATU"="ATU_fourth")) %>% 
+      rename(town_district=name) %>% 
+      mutate(ATU_fourth=ATU) %>% 
+      select(-ATU)
+    
+    prevnz_full <- bind_rows(prevnz_dist,prevnz_towns)
+    
+    #adjust source file until it's 0
+    assert_all_are_equal_to(nrow(prevnz %>% 
+                                   anti_join(prevnz_full,by="EDEBO_id") %>% 
+                                   group_by(ATU) %>% tally()),0)
+    
+    
+    #prepare ATU to schools
+    insts_wo_schools <- bind_rows(colleges_full,vnz_full,prevnz_full)
+    
+    ATU_compare <- read_excel(ATU_compare_file) %>% 
+      rename(ATU_code='Кодифікатор',
+             KOATUU_code="Код об'єкта КОАТУУ",
+             category="Категорія об’єкта",
+             name="Назва об’єкта") %>% 
+      filter(category!="Н") %>% 
+      mutate(across(name,~ gsub("&apos;|’","'",.x)))
+    
+    sch <- schools %>% inner_join(ATU_compare, by=c("KOATUU"="KOATUU_code"))
+    
+    l <- schools %>% anti_join(sch,by="EDEBO_id")
+    
+    sch2 <- l %>% mutate(join_key = substr(KOATUU, 1, 5)) %>%
+      inner_join(ATU_compare %>% mutate(join_key = substr(KOATUU_code, 1, 5)), 
+                 by = c("join_key","town"="name"))
+    
+    #adjust source file until it's 0
+    assert_all_are_equal_to(nrow(sch2[duplicated(sch2$EDEBO_id),]),0)
+    
+    sch3 <- l %>% anti_join(sch2,by="EDEBO_id") %>% 
+      mutate(join_key = substr(KOATUU, 1, 2)) %>%
+      inner_join(ATU_compare %>% mutate(join_key = substr(KOATUU_code, 1, 2)), 
+                 by = c("join_key","town"="name"))
+    
+    #adjust source file until it's 0
+    assert_all_are_equal_to(nrow(sch3[duplicated(sch3$EDEBO_id),]),0)
+    
+    schools_atu <- bind_rows(sch,sch2,sch3) %>% 
+      mutate(ATU_extra=if_else(category=="В",ATU_code,'NA'),
+             ATU_fourth=if_else(category!="В",ATU_code,'NA')) %>% 
+      select(-c(KOATUU,KOATUU_code,join_key,category,ATU_code)) %>% 
+      rename(town_district=name)
+    
+    #adjust source file until it's 0
+    assert_all_are_equal_to(nrow(schools %>% anti_join(schools_atu,by="EDEBO_id")),0)
+    
+    schools_dist <- schools_atu %>% inner_join(ATU$district, by="ATU_extra") %>% 
+      rename(ATU_fourth=ATU_fourth.y) %>% 
+      select(-c(ATU_fourth.x,name))
+    
+    schools_town <- schools_atu %>% anti_join(schools_dist,by="EDEBO_id") %>% 
+      inner_join(ATU$settlement,by="ATU_fourth")
+    
+    schools_full <- bind_rows(schools_dist,schools_town) %>% 
+      mutate(town_district=if_else(is.na(name),town_district,name)) %>% 
+      select(-name)
+    
+    #adjust source file until it's 0
+    assert_all_are_equal_to(nrow(schools_atu %>% anti_join(schools_full,by="EDEBO_id")),0)
+    
+    
+    #merge all institutions into one dataset
+    insts <- bind_rows(prevnz_full,schools_full,vnz_full,colleges_full) %>% 
+      left_join(ATU$hromada %>% select(ATU_third,name),by="ATU_third") %>% 
+      left_join(ATU$adm,by=c("ATU_third"="ATU_first")) %>% 
+      mutate(hromada=if_else(is.na(name.x),name.y,name.x)) %>% 
+      select(-c(name.x,name.y)) %>% 
+      left_join(ATU$rajon %>% select(ATU_second,name),by="ATU_second") %>% 
+      left_join(ATU$adm,by=c("ATU_second"="ATU_first")) %>% 
+      mutate(rajon=if_else(is.na(name.x),name.y,name.x)) %>% 
+      select(-c(name.x,name.y)) %>% 
+      left_join(ATU$oblast,by="ATU_first") %>% 
+      left_join(ATU$adm,by="ATU_first") %>% 
+      mutate(oblast=if_else(is.na(name.x),name.y,name.x)) %>% 
+      select(-c(name.x,name.y)) %>% 
+      select(EDEBO_id:parent,oblast,rajon,hromada,town_district,address,
+             ATU_first:ATU_fourth,ATU_extra)
+    
+    #read old inst dataset with geodata
+    insts_old <- read_full_institutions(institutions_full) %>% 
+      mutate(across(full_name,~str_replace_all(.x,c("„|”"="","`"="'")) %>% 
+                      gsub(pattern = "I",replacement = "І",ignore.case = TRUE))) %>% 
+      mutate(across(.cols = c(full_name:old_name4), 
+                    .fns =  ~str_replace_all(str_trim(str_to_lower(.x))," ",""),
+                    .names = '{str_c("s",gsub("^.*?_","_",.col))}')) %>% 
+      mutate(ATU_crop = str_sub(ATU_code,1,12))
   }
+  #find difference between old and new inst datasets
+  delta <- insts %>% inner_join(insts_old,by="EDEBO_id") %>% 
+    select(-old_name4) %>% 
+    rename(type=type.x,oblast=oblast.x,hromada=hromada.x,town_district=town_district.x,
+           address=address.x,old_name0=full_name,old_name1=old_name0,
+           old_name2=old_name1,old_name3=old_name2,old_name4=old_name3) %>% 
+    select(EDEBO_id:short,old_name0:old_name4,type:ATU_extra,long:occupied)
+  
+  #dealt with data to be validated
+  {
+    #select rows with geodata which are not present in the new dataset
+    inst_to_check_names <- insts_old %>% anti_join(delta,by="EDEBO_id")
+    
+    inst_to_check_names_occup <- inst_to_check_names %>% filter(occupied==1) %>% 
+      mutate(u_status="тимчасово окупована",
+             u_date=case_when(
+               str_detect(oblast,"Севастополь|Автономна Республіка Крим") ~ as.Date("20.02.2014", 
+                                                                                    format = "%d.%m.%Y"),
+               str_detect(oblast,"Донецька") ~ as.Date("7.04.2014",format = "%d.%m.%Y"),
+               str_detect(oblast,"Луганська") ~ as.Date("29.04.2014",format = "%d.%m.%Y")
+             ))
+    
+    
+    inst_to_check_names_free <- inst_to_check_names %>% filter(occupied==0)
+    
+    inst_to_check_names_univ <- inst_to_check_names_free[grepl("^\\d{2,4}$",
+                                                               inst_to_check_names_free$EDEBO_id)]
+    
+    inst_to_check_names_univ$u_status <- NA
+    inst_to_check_names_univ$u_date <- NA
+    
+    for(i in 1:nrow(inst_to_check_names_univ)) {
+      
+      id <- inst_to_check_names_univ$EDEBO_id[i]
+      
+      url <- paste0("https://registry.edbo.gov.ua/university/",id,"/")
+      
+      univ_status <- read_html(url) %>% 
+        html_nodes(".close-type>div") %>% 
+        html_text()
+      
+      if (length(univ_status) > 0) {
+        inst_to_check_names_univ$u_status[i] <- univ_status
+      }
+      
+      blocked_date <- read_html(url) %>% 
+        html_nodes(".close-date>div") %>% 
+        html_text()
+      
+      if (length(blocked_date) > 0) {
+        
+        blocked_date <- as.Date(blocked_date, format = "%d.%m.%Y")
+        
+        inst_to_check_names_univ$u_date[i] <- blocked_date
+      }
+      
+    }
+    
+    inst_to_check_names_univ$u_date <- as.Date(inst_to_check_names_univ$u_date,
+                                               origin = "1970-01-01")
+    
+    inst_to_check_names_univ2 <- inst_to_check_names_univ %>% 
+      filter(is.na(u_status))
+    
+    for(i in 1:nrow(inst_to_check_names_univ2)) {
+      
+      id <- inst_to_check_names_univ2$EDEBO_id[i]
+      
+      url <- paste0("https://vstup.osvita.ua/r1/",id,"/")
+      
+      page <- tryCatch(
+        {
+          read_html(url)
+        },
+        error = function(e) {
+          warning("Error: The webpage could not be found (HTTP 404). Skipping...")
+          NULL  # Return NULL to indicate the failure
+        }
+      )
+      
+      if (!is.null(page)) {
+        
+        univ_status2 <- page %>% 
+          html_nodes("table.pro-vnz-table") %>% 
+          html_table() %>% as.data.frame()
+        
+        inst_to_check_names_univ2$u_status[i] <- univ_status2[[3,2]]
+      }
+      
+    }
+    
+    inst_to_check_names_univ_done <- bind_rows(inst_to_check_names_univ %>% 
+                                                 filter(!is.na(u_status)),
+                                               inst_to_check_names_univ2)
+    
+    inst_to_check_names_schools <- inst_to_check_names_free[grepl("^\\d{5,6}$",
+                                                                  inst_to_check_names_free$EDEBO_id)]
+    inst_to_check_names_schools$u_status <- NA
+    inst_to_check_names_schools$u_date <- NA
+    
+    for(i in 1:nrow(inst_to_check_names_schools)) {
+      
+      id <- inst_to_check_names_schools$EDEBO_id[i]
+      
+      url <- paste0("https://registry.edbo.gov.ua/institution/",id,"/")
+      
+      school_status <- read_html(url) %>% 
+        html_nodes("#institution-info>div:nth-child(4)>div") %>% 
+        html_text()
+      
+      if (length(school_status) > 0) {
+        inst_to_check_names_schools$u_status[i] <- school_status
+      }
+      
+      blocked_date <- read_html(url) %>% 
+        html_nodes("#institution-info>div:nth-child(19)>div") %>% 
+        html_text()
+      
+      if (length(blocked_date) > 0) {
+        
+        blocked_date <- as.Date(blocked_date, format = "%d.%m.%Y")
+        
+        inst_to_check_names_schools$u_date[i] <- blocked_date
+      }
+      
+    }
+    
+    inst_to_check_names_schools$u_date <- as.Date(inst_to_check_names_schools$u_date,
+                                                  origin = "1970-01-01")
+    
+    inst_to_check_names_done <- bind_rows(inst_to_check_names_occup,
+                                          inst_to_check_names_schools,
+                                          inst_to_check_names_univ_done)
+    
+    assert_all_are_equal_to(nrow(inst_to_check_names_done),nrow(inst_to_check_names))
+    
+    reas <- "неукладенням|заборгованістю|заблоковано за заявою закладу|заборгованість|доступу"
+    
+    inst_to_check_names_done <- inst_to_check_names_done %>% 
+      mutate(across(u_status,str_to_lower)) %>% 
+      mutate(u_status=case_when(
+        str_detect(u_status,reas) ~ "заблоковано",
+        str_detect(u_status,"науковий|наукові|заклад|–") ~ "працює",
+        str_detect(u_status,"реорганізація") ~ "реорганізовано",
+        str_detect(u_status,"перебуває|призупинення") ~ "припинено",
+        TRUE ~ u_status
+      ))
+    
+    inst_to_check_names_done$u_status <- factor(inst_to_check_names_done$u_status)
+    
+    inst_validated_names <- inst_to_check_names_done %>% 
+      select(-c(s_name:n,category,add_map,koatuu_id))
+  }
+  
+  
+  inst_v_n_d <- inst_validated_names %>% inner_join(ATU$district,
+                                                    by=c("ATU_code"="ATU_extra")) %>% 
+    mutate(ATU_extra=ATU_code,town_district=name) %>% 
+    select(-c(ATU_code,name)) %>% 
+    relocate(ATU_first:ATU_extra, .after = address)
+  
+  inst_v_n_t <- inst_validated_names %>% anti_join(inst_v_n_d,by="EDEBO_id") %>% 
+    inner_join(ATU$settlement,by=c("ATU_code"="ATU_fourth")) %>% 
+    mutate(ATU_fourth=ATU_code,town_district=name) %>% 
+    select(-c(ATU_code,name)) %>% 
+    relocate(ATU_first:ATU_fourth, .after = address)
+  
+  inst_v_n <- bind_rows(inst_v_n_d,inst_v_n_t)
+    
+
+  #dealt with items without geodata
+  {
+    #select rows without geodata which are not present in the old dataset
+    inst_wo_geodata <- insts %>% anti_join(delta,by="EDEBO_id")
+    
+    inst_wo_geodata <- inst_wo_geodata %>% 
+      mutate(across(address, ~str_replace(.,"бульвар|бульв. ","бульвар "))) %>% 
+      mutate(across(address, ~str_replace(.,"проспект|просп. ","проспект "))) %>% 
+      mutate(across(address, ~str_replace(.,"провулок|пров. ","провулок "))) %>% 
+      mutate(across(address, ~str_replace(.,"набережна|наб. ","набережна "))) %>% 
+      mutate(across(address, ~str_replace(.,"площа|пл. ","площа "))) %>% 
+      mutate(addr_query=paste(rajon,hromada,town_district,address,sep = ","))
+    
+    
+    output_filter <- c("school","university","tertiary",
+                       "college","yes","residential","industrial",
+                       "secondary","ed","primary","house","unclassified",
+                       "music school","apartments","kindergarten",
+                       "administrative","city","town","village","yes",
+                       "residential")
+    
+    split_data <- split(inst_wo_geodata, rep(1:5, length.out = length(inst_wo_geodata)))
+    
+    
+    inst_add_geodata_1 <- get_geocodes_nominatim(split_data[[5]],
+                                                 split_data[[5]]$addr_query,output_filter)
+    
+    inst_add_geodata_1_1 <- inst_add_geodata_1 %>% filter(!is.na(long))
+    
+    inst_add_geodata_1_2 <- inst_add_geodata_1 %>% filter(is.na(long))
+    
+    qry <- inst_add_geodata_1_2 %>% 
+      mutate(across(addr_query,~str_remove(.,",[^,]*$")))
+    
+    inst_add_geodata_1_2 <- get_geocodes_nominatim(inst_add_geodata_1_2,
+                                                   qry$addr_query,output_filter) 
+    
+    inst_add_geodata_1_2 <- inst_add_geodata_1_2 %>% filter(!is.na(long))
+    
+    inst_add_geodata_1_3 <- inst_add_geodata_1 %>% 
+      anti_join(inst_add_geodata_1_1, by="EDEBO_id") %>% 
+      anti_join(inst_add_geodata_1_2,by="EDEBO_id")
+    
+    qry <- inst_add_geodata_1_3 %>% 
+      mutate(across(addr_query,~ paste(rajon,hromada,town_district,sep = ",")))
+    
+    inst_add_geodata_1_3 <- get_geocodes_nominatim(inst_add_geodata_1_3,
+                                                   qry$addr_query,output_filter)
+    
+    inst_add_geodata_to_write <- bind_rows(inst_add_geodata_1_1,
+                                           inst_add_geodata_1_2,inst_add_geodata_1_3)
+    
+    
+    fwrite(inst_add_geodata_to_write,
+           "G:/Other computers/My Laptop/R/ZNO/ZNO/resources/institutions/institutions_new_geodata_5.csv",
+           sep=";",quote = FALSE)
+    
+    inst_geo_1 <- fread("G:/Other computers/My Laptop/R/ZNO/ZNO/resources/institutions/institutions_new_geodata_1.csv",
+                        na.strings = c("",NA))
+    inst_geo_2 <- fread("G:/Other computers/My Laptop/R/ZNO/ZNO/resources/institutions/institutions_new_geodata_2.csv",
+                        na.strings = c("",NA))
+    inst_geo_3 <- fread("G:/Other computers/My Laptop/R/ZNO/ZNO/resources/institutions/institutions_new_geodata_3.csv",
+                        na.strings = c("",NA))
+    inst_geo_4 <- fread("G:/Other computers/My Laptop/R/ZNO/ZNO/resources/institutions/institutions_new_geodata_4.csv",
+                        na.strings = c("",NA))
+    inst_geo_5 <- fread("G:/Other computers/My Laptop/R/ZNO/ZNO/resources/institutions/institutions_new_geodata_5.csv",
+                        na.strings = c("",NA))
+  
+  }
+  inst_geo <- bind_rows(inst_geo_1,inst_geo_2,inst_geo_3,inst_geo_4,inst_geo_5)
+  
+  insts_final <- bind_rows(inst_v_n,inst_geo,delta)
+  
+  fwrite(insts_final,institutions_dictionary,sep=";",quote = FALSE)
+  
+}
 
 #check correctness of the final dataset
 {
   #read all institutions
-  insts <- read_full_institutions(institutions_full)
+  insts <- fread(institutions_dictionary,na.strings = c("",NA)) %>% 
+    mutate(across(c(type,status,property,closed),as.factor))
   
   #check if data is clean
   assert_final_inst_dataset(insts)
@@ -494,7 +944,7 @@ source("global.R")
     #bind occupied and active schools
     inst_full <- bind_rows(inst_occupied,inst) %>% 
       mutate(across(full_name, 
-                    ~str_replace_all(.x,c("I"="Р†","вЂћ|вЂќ"="","`"="'"))))
+                    ~str_replace_all(.x,c("I"="І","„|”"="","`"="'"))))
     
   }
   
@@ -557,7 +1007,7 @@ source("global.R")
               
               #fetch schools IDs into one dataset
               t_tmp <- bind_rows(t_tmp) %>%
-                select('в„– Сѓ СЃРёСЃС‚РµРјС–') %>% rename(id_='в„– Сѓ СЃРёСЃС‚РµРјС–') %>% 
+                select('№ у системі') %>% rename(id_='№ у системі') %>% 
                 mutate(type=inst_types[i], koatuu=koatuu_codes[j]) %>%
                 mutate_if(is.numeric, as.character)
               
@@ -575,7 +1025,7 @@ source("global.R")
               html_table()
             
             t_tmp <- bind_rows(t_tmp) %>%
-              select('в„– Сѓ СЃРёСЃС‚РµРјС–') %>% rename(id_='в„– Сѓ СЃРёСЃС‚РµРјС–') %>% 
+              select('№ у системі') %>% rename(id_='№ у системі') %>% 
               mutate(type=inst_types[i],koatuu=koatuu_codes[j]) %>% 
               mutate_if(is.numeric, as.character)
             
@@ -589,7 +1039,7 @@ source("global.R")
       
       #remove IDs of inactive schools
       schools_table <- schools_table %>% 
-        filter(id_ != "Р—Р—РЎРћ, СЏРєС– РЅРµ РїСЂР°С†СЋСЋС‚СЊ")
+        filter(id_ != "ЗЗСО, які не працюють")
       
       return(schools_table)
       
@@ -620,17 +1070,17 @@ source("global.R")
       
       #combine data from table and geodata into one dataset
       sc_table <- table %>% 
-        select(id='в„– Сѓ СЃРёСЃС‚РµРјС–:',
-               full_name='РџРѕРІРЅР° РЅР°Р·РІР°:',
-               short_name='РЎРєРѕСЂРѕС‡РµРЅР°:',
-               koatuu_code='РљРѕРґ РљРћРђРўРЈРЈ:',
-               type='РўРёРї Р—Р—РЎРћ:',
-               ownership='Р¤РѕСЂРјР° РІР»Р°СЃРЅРѕСЃС‚С–:',
-               location_type='РўРёРї РјС–СЃС†РµРІРѕСЃС‚С–:',
-               zip='Р†РЅРґРµРєСЃ:',
-               address='РџРѕС€С‚РѕРІР° Р°РґСЂРµСЃР°:',
-               website_url='РЎР°Р№С‚(Рё):',
-               portal_url='Р—Р—РЎРћ РЅР° РїРѕСЂС‚Р°Р»С– В«РќРѕРІС–В Р·РЅР°РЅРЅСЏВ»:') %>%
+        select(id='№ у системі:',
+               full_name='Повна назва:',
+               short_name='Скорочена:',
+               koatuu_code='Код КОАТУУ:',
+               type='Тип ЗЗСО:',
+               ownership='Форма власності:',
+               location_type='Тип місцевості:',
+               zip='Індекс:',
+               address='Поштова адреса:',
+               website_url='Сайт(и):',
+               portal_url='ЗЗСО на порталі «Нові знання»:') %>%
         mutate(latitude=geo[1], longtitude=geo[2]) %>% 
         as_tibble()
       
@@ -641,15 +1091,15 @@ source("global.R")
       
       #combine data from table and geodata into one dataset
       sc_table <- table %>% 
-        select(id='в„– Сѓ СЃРёСЃС‚РµРјС–:',
-               full_name='РџРѕРІРЅР° РЅР°Р·РІР°:',
-               short_name='РЎРєРѕСЂРѕС‡РµРЅР°:',
-               koatuu_code='РљРѕРґ РљРћРђРўРЈРЈ:',
-               type='РўРёРї:',
-               ownership='Р¤РѕСЂРјР° РІР»Р°СЃРЅРѕСЃС‚С–:',
-               zip='Р†РЅРґРµРєСЃ:',
-               address='РџРѕС€С‚РѕРІР° Р°РґСЂРµСЃР°:',
-               website_url='РЎР°Р№С‚(Рё):') %>%
+        select(id='№ у системі:',
+               full_name='Повна назва:',
+               short_name='Скорочена:',
+               koatuu_code='Код КОАТУУ:',
+               type='Тип:',
+               ownership='Форма власності:',
+               zip='Індекс:',
+               address='Поштова адреса:',
+               website_url='Сайт(и):') %>%
         mutate(latitude=geo[1], longtitude=geo[2]) %>% 
         as_tibble()
       
@@ -1372,7 +1822,7 @@ source("global.R")
       crimea_schools <- read_csv("Schools_data.csv")
       
       crimea_schools <- crimea_schools %>% 
-        filter(tabtxt %like% "РђРІС‚РѕРЅРѕРјРЅР° Р РµСЃРїСѓР±Р»С–РєР° РљСЂРёРј|РЎРµРІР°СЃС‚РѕРїРѕР»СЊ") %>% 
+        filter(tabtxt %like% "Автономна Республіка Крим|Севастополь") %>% 
         rename(address=tabtxt,
                short_name=value,
                full_name=eoname,
@@ -1404,13 +1854,13 @@ source("global.R")
           
         }
         
-        if(grepl("СЃ\\.|СЃ-С‰Рµ|СЃРµР»Рѕ|СЃРµР»РёС‰Рµ",crimea_schools$address[i])) {
+        if(grepl("с\\.|с-ще|село|селище",crimea_schools$address[i])) {
           
-          crimea_schools$location_type[i] <- "СЃС–Р»СЊСЃСЊРєР°"
+          crimea_schools$location_type[i] <- "сільська"
         }
         else {
           
-          crimea_schools$location_type[i] <- "РјС–СЃСЊРєР°"
+          crimea_schools$location_type[i] <- "міська"
           
         }
       }
