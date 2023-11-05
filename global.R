@@ -4,7 +4,7 @@
   packages <- c("dplyr", "tidyr", "stringr", "data.table", "readr", "assertive",
                 "readxl", "rjson", "stringi", "purrr", "ggmap", "jsonlite",
                 "leaflet", "rvest", "xml2", "sf", "tm", "stringdist", "mgsub",
-                "tictoc", "openxlsx")
+                "tictoc", "openxlsx", "vscDebugger")
 
   # Identify the packages that need to be installed
   p_to_inst <- packages[!packages %in% installed.packages()[, "Package"]]
